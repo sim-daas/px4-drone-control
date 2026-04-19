@@ -1,0 +1,57 @@
+# Drone Controller — Lightweight container
+# mavlink-router + mavsdk_server + Python controller with REST API
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies (including libsystemd-dev for mavlink-router)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    meson \
+    ninja-build \
+    pkg-config \
+    libsystemd-dev \
+    git \
+    curl \
+    wget \
+    tmux \
+    ruby \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install tmuxinator
+RUN gem install tmuxinator
+
+# ─── Build mavlink-router from source ───────────────────────────────────
+RUN git clone --depth 1 https://github.com/mavlink-router/mavlink-router.git /tmp/mavlink-router && \
+    cd /tmp/mavlink-router && \
+    git submodule update --init --recursive && \
+    meson setup build . -Dsystemdsystemunitdir= && \
+    ninja -C build && \
+    ninja -C build install && \
+    rm -rf /tmp/mavlink-router
+
+# ─── Install mavsdk_server binary ───────────────────────────────────────
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "amd64" ]; then \
+        MAVSDK_URL="https://github.com/mavlink/MAVSDK/releases/download/v3.15.0/mavsdk_server_musl_x86_64"; \
+    elif [ "$ARCH" = "arm64" ]; then \
+        MAVSDK_URL="https://github.com/mavlink/MAVSDK/releases/download/v3.15.0/mavsdk_server_linux-arm64-musl"; \
+    fi && \
+    wget -q "${MAVSDK_URL}" -O /usr/local/bin/mavsdk_server && \
+    chmod +x /usr/local/bin/mavsdk_server
+
+# ─── Python dependencies ───────────────────────────────────────────────
+COPY drone_controller/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# ─── Copy application files ────────────────────────────────────────────
+COPY drone_controller/ /app/
+COPY shared/ /app/shared/
+RUN chmod +x /app/entrypoint.sh
+
+# Create tmuxinator config directory
+RUN mkdir -p /root/.config/tmuxinator
+
+EXPOSE ${API_PORT:-5001}
+
+CMD ["/app/entrypoint.sh"]

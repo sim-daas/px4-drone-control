@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "controller"
+version = "0.0.0"
+description = "Actuator-level controller package"
+maintainer = "ubuntu"
+maintainer_email = "ubuntu@todo.todo"
+license = {text = "TODO: License declaration"}
+dependencies = ["setuptools"]
+
+[tool.setuptools.packages.find]

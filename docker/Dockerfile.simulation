@@ -1,0 +1,38 @@
+# Simulation container — Gazebo + PX4 SITL + XRCE-DDS
+# Built on top of the existing monemati base image
+FROM monemati/px4_ros2_gazebo_yolov8
+
+WORKDIR /root
+
+# Ensure tmuxinator is available
+RUN gem install tmuxinator 2>/dev/null || true
+
+# ROS2 Cyclone DDS setup (from existing Dockerfile)
+RUN rm -f /etc/apt/sources.list.d/ros*.list && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+        http://packages.ros.org/ros2/ubuntu jammy main" \
+        > /etc/apt/sources.list.d/ros2.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends ros-humble-rmw-cyclonedds-cpp && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+RUN echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
+
+# Fix numpy compatibility
+RUN pip3 install "numpy<2.0" --force-reinstall
+
+# Setup ROS 2 workspace
+RUN mkdir -p /root/ros2_ws/src
+WORKDIR /root/ros2_ws
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc
+RUN echo "source /root/ros2_ws/install/setup.bash" >> /root/.bashrc
+
+# Copy simulation files
+COPY simulation/sim.yml /app/sim.yml
+COPY simulation/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+CMD ["/app/entrypoint.sh"]
