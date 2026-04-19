@@ -56,11 +56,11 @@ class IntegratedMotorTest(Node):
         # Simple ramp up and down between 0.1 and 0.3
         if self.increasing:
             self.throttle += 0.002
-            if self.throttle >= 0.8:
+            if self.throttle >= 0.75:
                 self.increasing = False
         else:
             self.throttle -= 0.002
-            if self.throttle <= 0.79:
+            if self.throttle <= 0.72:
                 self.increasing = True
 
         msg.control = [float('nan')] * 12

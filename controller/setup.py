@@ -23,6 +23,7 @@ setup(
             'offboard_heartbeat = controller.offboard_heartbeat:main',
             'motor_test = controller.motor_test:main',
             'integrated_motor_test = controller.integrated_motor_test:main',
+            'rate_controller = controller.rate_controller:main',
         ],
     },
 )
