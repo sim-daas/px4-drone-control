@@ -1,11 +1,13 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-from px4_msgs.msg import OffboardControlMode, VehicleCommand, ActuatorMotors, VehicleAngularVelocity
+from px4_msgs.msg import OffboardControlMode, VehicleCommand, ActuatorMotors, VehicleOdometry
 import numpy as np
+import math
+
 
 class PID:
-    def __init__(self, kp, ki, kd, max_integral=1.0):
+    def __init__(self, kp, ki, kd, max_integral=5.0):
         self.kp = kp
         self.ki = ki
         self.kd = kd
@@ -40,8 +42,8 @@ class RateController(Node):
         self.motor_publisher = self.create_publisher(
             ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
         
-        self.angular_velocity_subscriber = self.create_subscription(
-            VehicleAngularVelocity, '/fmu/out/vehicle_angular_velocity', self.angular_velocity_callback, qos_profile)
+        self.odometry_subscriber = self.create_subscription(
+            VehicleOdometry, '/fmu/out/vehicle_odometry', self.odometry_callback, qos_profile)
 
         # 250Hz timer
         self.dt = 1.0 / 250.0
@@ -49,30 +51,35 @@ class RateController(Node):
         
         self.setpoint_counter = 0
         self.current_rates = np.zeros(3)
+        self.origin_set = False
 
         # Mixing Matrix inverse (from thrust/torques to motor commands)
         # Vector order: [tau_x, tau_y, tau_z, Thrust]
         self.mixer = np.array([
-            [-0.43773276, -0.70710677, -0.909091, 1.0],
-            [ 0.43773273,  0.70710677, -1.0,      1.0],
-            [ 0.43773276, -0.70710677,  0.909091, 1.0],
-            [-0.43773273,  0.70710677,  1.0,      1.0]
+            [-0.43773276,  0.70710677,  0.909091, 1.0],
+            [ 0.43773273, -0.70710677,  1.0,      1.0],
+            [ 0.43773276,  0.70710677, -0.909091, 1.0],
+            [-0.43773273, -0.70710677, -1.0,      1.0]
         ])
 
         # PID controllers
-        self.pid_p = PID(0.5, 0.05, 0.01)
-        self.pid_q = PID(0.5, 0.05, 0.01)
-        self.pid_r = PID(0.1, 0.0, 0.0)
+        self.pid_p = PID(0.1, 0.0001, 0.0001)
+        self.pid_q = PID(0.1, 0.0001, 0.0001)
+        self.pid_r = PID(0.1, 0.0001, 0.0001)
 
         # Desired rates and thrust
         self.desired_rates = np.zeros(3)
-        self.hover_thrust = 0.75 # Nominal hover thrust
+        self.hover_thrust = 0.735 # Nominal hover thrust
 
-    def angular_velocity_callback(self, msg):
+    def odometry_callback(self, msg):
         # Rates are in FRD (Forward-Right-Down) body frame
-        self.current_rates[0] = msg.xyz[0] # roll rate (p)
-        self.current_rates[1] = msg.xyz[1] # pitch rate (q)
-        self.current_rates[2] = msg.xyz[2] # yaw rate (r)
+        self.current_rates[0] = msg.angular_velocity[0] # roll rate (p)
+        self.current_rates[1] = msg.angular_velocity[1] # pitch rate (q)
+        self.current_rates[2] = msg.angular_velocity[2] # yaw rate (r)
+        
+        if not self.origin_set and not np.isnan(msg.position[0]):
+            self.origin_set = True
+            self.get_logger().info("Odometry received. Controller active.")
 
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -108,18 +115,17 @@ class RateController(Node):
         self.vehicle_command_publisher.publish(msg)
 
     def timer_callback(self):
+        if not self.origin_set:
+            return
+
         # Hardcoded step input sequence
         time_sec = self.setpoint_counter * self.dt
-        if 6.0 < time_sec < 10.0:
-            self.desired_rates = np.array([0.5, 0.0, 0.0]) # Roll step
-        elif 10.0 < time_sec < 12.0:
-            self.desired_rates = np.array([-0.5, 0.0, 0.0]) # Roll step reverse
-        elif 12.0 < time_sec < 14.0:
-            self.desired_rates = np.array([0.0, 0.5, 0.0]) # Pitch step
+        if 5.0 < time_sec < 7.0:
+            self.desired_rates = np.array([0.0, 0.0, 0.0]) # Roll step placeholder
         else:
             self.desired_rates = np.array([0.0, 0.0, 0.0]) # Stabilize
 
-        # Calculate rate errors
+        # Calculate rate errors (directly in body frame)
         error_p = self.desired_rates[0] - self.current_rates[0]
         error_q = self.desired_rates[1] - self.current_rates[1]
         error_r = self.desired_rates[2] - self.current_rates[2]
@@ -136,6 +142,9 @@ class RateController(Node):
         
         # Constrain motor commands [0, 1]
         u = np.clip(u, 0.0, 1.0)
+        
+        # Testing: override with fixed throttle
+        # u = np.array([0.75, 0.75, 0.75, 0.75])
 
         # Publish
         self.publish_offboard_control_mode()
@@ -152,6 +161,12 @@ class RateController(Node):
         msg.control[3] = u[3]
         
         self.motor_publisher.publish(msg)
+        
+        # Debug logging every 0.5s
+        if self.setpoint_counter % 62.5 == 0:
+            self.get_logger().info(
+                f"t={time_sec:.1f}s | u={u[0]:.4f},{u[1]:.4f},{u[2]:.4f},{u[3]:.4f} | "
+                f"err={error_p:.4f},{error_q:.4f},{error_r:.4f}")
 
         if self.setpoint_counter == int(1.0 / self.dt):
             self.engage_offboard_mode()
