@@ -15,6 +15,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from px4_msgs.msg import OffboardControlMode, VehicleCommand, ActuatorMotors, VehicleOdometry
+from geometry_msgs.msg import Point
 import numpy as np
 
 
@@ -98,6 +99,13 @@ class DroneController(Node):
             VehicleOdometry, '/fmu/out/vehicle_odometry',
             self.odometry_callback, qos)
 
+        # Subscriber — external position setpoints from operator input script
+        # Topic: /drone/target_position  |  Type: geometry_msgs/Point
+        # Field mapping (NED): x = North [m], y = East [m], z = Down [m]
+        self.setpoint_sub = self.create_subscription(
+            Point, '/drone/target_position',
+            self.setpoint_callback, 10)
+
         # 250 Hz heartbeat (keepalive only — no control math here)
         self.heartbeat_timer = self.create_timer(1.0 / 250.0, self.heartbeat_callback)
 
@@ -117,9 +125,15 @@ class DroneController(Node):
         # ------------------------------------------------------------------
         # Setpoints
         # ------------------------------------------------------------------
-        # Target position in NED [m]. Set here for the test waypoint.
-        # In a full mission planner this would be updated externally.
-        self.target_pos_ned = np.array([5.0, 5.0, -5.0])   # 5 m above origin
+        # Safe hover altitude above spawn point [m, NED Down axis].
+        # The actual hover position is latched in the first odometry callback
+        # once the real spawn coordinates are known.
+        self.safe_hover_alt_offset = -5.0   # 5 m above spawn (NED: negative = up)
+
+        # Initial value — overwritten in first odometry callback to
+        # [spawn_N, spawn_E, spawn_D + safe_hover_alt_offset].
+        self.target_pos_ned  = np.array([0.0, 0.0, -5.0])
+        self.origin_pos_ned  = np.zeros(3)   # latched spawn position
 
         # Yaw target [rad]. Latched to initial heading at startup.
         self.target_yaw = 0.0
@@ -207,19 +221,28 @@ class DroneController(Node):
     def odometry_callback(self, msg):
         now_ns = self.get_clock().now().nanoseconds
 
-        # ---- First message: latch origin and initial yaw -----------------
+        # ---- First message: latch origin, set safe hover target ----------
         if not self.origin_set:
             if np.isnan(msg.position[0]):
                 return
             R_init = quat_to_rot(msg.q)
             _, _, initial_yaw = rot_to_euler(R_init)
-            self.target_yaw   = initial_yaw
-            self.last_odom_ns = now_ns
-            self.start_time_s = now_ns * 1e-9
-            self.origin_set   = True
+            self.target_yaw      = initial_yaw
+            self.last_odom_ns    = now_ns
+            self.start_time_s    = now_ns * 1e-9
+            self.origin_set      = True
+
+            # Latch spawn position and set initial hover target directly above it
+            self.origin_pos_ned  = np.array([msg.position[0],
+                                             msg.position[1],
+                                             msg.position[2]])
+            self.target_pos_ned  = np.array([self.origin_pos_ned[0],
+                                             self.origin_pos_ned[1],
+                                             self.origin_pos_ned[2] + self.safe_hover_alt_offset])
             self.get_logger().info(
                 f"Odometry locked. "
-                f"Start pos NED=[{msg.position[0]:.2f},{msg.position[1]:.2f},{msg.position[2]:.2f}] m | "
+                f"Spawn NED=[{self.origin_pos_ned[0]:.2f},{self.origin_pos_ned[1]:.2f},{self.origin_pos_ned[2]:.2f}] m | "
+                f"Safe hover target NED=[{self.target_pos_ned[0]:.2f},{self.target_pos_ned[1]:.2f},{self.target_pos_ned[2]:.2f}] m | "
                 f"Initial yaw={np.degrees(initial_yaw):.1f} deg"
             )
             return  # no valid dt on the first message
@@ -413,6 +436,20 @@ class DroneController(Node):
                 f"att_tgt=[{np.degrees(target_roll):.1f},{np.degrees(target_pitch):.1f}] deg | "
                 f"thrust={thrust:.3f}"
             )
+
+    # =========================================================================
+    # Setpoint callback — receives operator-commanded NED position
+    # =========================================================================
+    def setpoint_callback(self, msg: Point):
+        """
+        Receives a new NED position target from the operator input script.
+        msg.x = North [m], msg.y = East [m], msg.z = Down [m]
+        """
+        new_target = np.array([msg.x, msg.y, msg.z])
+        self.target_pos_ned = new_target
+        self.get_logger().info(
+            f"New setpoint received: N={msg.x:.2f} E={msg.y:.2f} D={msg.z:.2f} m (NED)"
+        )
 
     # =========================================================================
     # Helpers

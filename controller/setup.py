@@ -26,6 +26,7 @@ setup(
             'rate_controller = controller.rate_controller:main',
             'se3_controller = controller.se3_controller:main',
             'drone_controller = controller.drone_controller:main',
+            'position_input = controller.position_input:main',
         ],
     },
 )
