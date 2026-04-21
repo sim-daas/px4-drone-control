@@ -1,0 +1,28 @@
+#!/bin/sh
+# shellcheck disable=SC2154
+
+#param set-default MAV_SYS_ID $((px4_instance+1))
+#param set-default IMU_INTEG_RATE 250
+
+# -----------------------------------------------------------------------
+# Land Detector / Commander overrides for direct_actuator offboard mode
+#
+# When flying in direct_actuator mode, PX4 cannot see internal thrust
+# setpoints, so the land detector falsely triggers at hover.
+# These parameters disable or relax that logic for simulation.
+#
+# Deploy: copy to (inside drone-simulation container):
+#   /root/PX4-Autopilot/build/px4_sitl_default/etc/init.d-posix/px4-rc.params
+# -----------------------------------------------------------------------
+
+# Disable auto-disarm after landing detection (-1 = disabled)
+param set-default COM_DISARM_LAND -1
+
+# Raise land-detector velocity thresholds so near-hover flight is not
+# misclassified as a touchdown (default ~0.5 m/s → set to 10 m/s)
+param set-default LNDMC_Z_VEL_MAX 10.0
+param set-default LNDMC_XY_VEL_MAX 10.0
+
+# Disable flight-termination circuit breaker (prevents commander from
+# cutting motors when EKF health checks fail under direct_actuator)
+param set-default CBRK_FLIGHTTERM 121212
