@@ -92,7 +92,7 @@ class VelocityController(Node):
 
         # Thrust is computed dynamically by the velocity loop; it replaces
         # the static hover_thrust from the previous phase.
-        self.hover_thrust = 0.71  # used as a feedforward reference for thrust mapping
+        self.hover_thrust = 0.738  # used as a feedforward reference for thrust mapping
 
         # Tilt limit: maximum horizontal acceleration command before arcsin (m/s²)
         # 5.0 m/s² ≈ 30.7° max tilt
@@ -311,10 +311,10 @@ class VelocityController(Node):
 
         if 0 < elapsed < 5:
             self.desired_vel_ned = [0.0, 0.0, -2.0]
-        elif 6 < elapsed < 12:
-            self.desired_vel_ned = [1.5, 0.0, 0.0]
-        elif 12 < elapsed < 20:
-            self.desired_vel_ned = [1.5, 1, -1.0]
+        # elif 6 < elapsed < 12:
+        #     self.desired_vel_ned = [1.5, 0.0, 0.0]
+        # elif 12 < elapsed < 20:
+        #     self.desired_vel_ned = [1.5, 1, -1.0]
         else:
             self.desired_vel_ned = [0.0, 0.0, 0.0]
         # ================================================================

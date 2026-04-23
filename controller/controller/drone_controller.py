@@ -433,7 +433,8 @@ class DroneController(Node):
                 # f"tgt=[{self.target_pos_ned[0]:.2f},{self.target_pos_ned[1]:.2f},{self.target_pos_ned[2]:.2f}] m | "
                 # f"err_mag={pos_err_mag:.2f} m | "
                 f"vel_cmd=[{vel_cmd_N:.2f},{vel_cmd_E:.2f},{vel_cmd_D:.2f}] m/s | "
-                f"att_tgt=[{np.degrees(target_roll):.1f},{np.degrees(target_pitch):.1f}] deg | "
+                f"vel=[{self.current_vel_ned[0]:.2f},{self.current_vel_ned[1]:.2f},{self.current_vel_ned[2]:.2f}] m/s | "
+                # f"att_tgt=[{np.degrees(target_roll):.1f},{np.degrees(target_pitch):.1f}] deg | "
                 f"thrust={thrust:.3f}"
             )
 

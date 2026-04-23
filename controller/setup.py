@@ -27,6 +27,7 @@ setup(
             'se3_controller = controller.se3_controller:main',
             'drone_controller = controller.drone_controller:main',
             'position_input = controller.position_input:main',
+            'live_plotter = controller.live_plotter:main',
         ],
     },
 )

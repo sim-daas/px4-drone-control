@@ -1,1 +1,2 @@
-px4_offboard_lowlevel/.git
+px4_offboard_lowlevel/
+*__pycache__
