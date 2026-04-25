@@ -128,7 +128,7 @@ class DroneController(Node):
         # Safe hover altitude above spawn point [m, NED Down axis].
         # The actual hover position is latched in the first odometry callback
         # once the real spawn coordinates are known.
-        self.safe_hover_alt_offset = -5.0   # 5 m above spawn (NED: negative = up)
+        self.safe_hover_alt_offset = -2.0   # 5 m above spawn (NED: negative = up)
 
         # Initial value — overwritten in first odometry callback to
         # [spawn_N, spawn_E, spawn_D + safe_hover_alt_offset].
