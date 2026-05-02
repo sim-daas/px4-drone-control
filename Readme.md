@@ -3,6 +3,9 @@
 ## Executive Summary
 This report details the implementation of an actuator-level control pipeline for a quadrotor (x500) in PX4 SITL using ROS 2. By bypassing PX4's internal high-level position and attitude controllers, we established direct control over the `ActuatorMotors` topic. The project evolved from an open-loop motor test to a robust, fully cascaded control architecture (Position → Velocity → Attitude → Rate → Mixer) and also explored an advanced SE(3) geometric tracking controller.
 
+## Demo Video
+[![Final Demo](https://img.youtube.com/vi/5ZKq_dR_DrE/0.jpg)](https://youtu.be/5ZKq_dR_DrE)
+
 ## 1. Architectural Foundation & PX4 Integration
 
 ### Offboard Mode & Synchronization
