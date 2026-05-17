@@ -29,7 +29,7 @@ class PerceptionTracker(Node):
         
         # Initialize YOLOv8m
         self.get_logger().info("Loading YOLO model...")
-        self.yolo_model = YOLO('yolov8m.pt', )
+        self.yolo_model = YOLO('yolov8l.pt', )
         self.get_logger().info("YOLO loaded.")
         
         # Initialize ArUco

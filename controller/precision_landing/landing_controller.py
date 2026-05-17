@@ -28,7 +28,7 @@ class LandingController(Node):
         self.last_marker_seen_time = None
         
         self.state = "IDLE" # IDLE, DESCEND, LAND
-        self.target_alt_relative = -6.0 # Start descent from 6m relative
+        self.target_alt_relative = -5.5 # Start descent from 6m relative
         
         # Publishers
         self.offboard_mode_pub = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos)
@@ -156,7 +156,7 @@ class LandingController(Node):
         msg = TrajectorySetpoint()
         msg.position = [float(x), float(y), float(z)]
         msg.velocity = [float(vx), float(vy), float(vz)]
-        msg.yaw = 0.0 # Maintain north heading
+        msg.yaw = np.nan # Maintain north heading
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.trajectory_setpoint_pub.publish(msg)
 

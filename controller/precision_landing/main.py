@@ -25,7 +25,7 @@ class MissionOrchestrator(Node):
         
         self.state = "TAKEOFF" # TAKEOFF, MATCH_VELOCITY, SERVO_DESCEND, HANDOVER
         self.search_altitude = -10.0 # Fly at 15m altitude initially
-        self.tracking_altitude = -4.0 # Descend to 6m when tracking
+        self.tracking_altitude = -5.5 # Descend to 6m when tracking
         self.current_target_altitude = self.search_altitude
         
         self.target_pos = np.zeros(3)
@@ -39,7 +39,7 @@ class MissionOrchestrator(Node):
         self.car_move = False
         self.last_det_time = None
         
-        self.global_car_vel = 3.0 # Set this to test different velocities
+        self.global_car_vel = 2.0 # Set this to test different velocities
         
         self.sync_start_time = None
         
@@ -121,7 +121,7 @@ class MissionOrchestrator(Node):
         if self.start_pos is None:
             return
 
-        if ((self.drone_pos[2] - self.search_altitude) < 2.5) or self.car_move:
+        if ((self.drone_pos[2] - self.search_altitude) < 1) or self.car_move:
             self.car_move = True
             vel_msg = Float64()
             vel_msg.data = self.global_car_vel
@@ -164,7 +164,7 @@ class MissionOrchestrator(Node):
         if self.state == "TAKEOFF":
             self.publish_trajectory_setpoint(self.target_pos[0], self.target_pos[1], self.search_altitude, self.target_yaw)
             
-            if abs(self.drone_pos[2] - self.search_altitude) < 0.5:
+            if abs(self.drone_pos[2] - self.search_altitude) < 1:
                 self.state = "MATCH_VELOCITY"
                 self.get_logger().info("Search altitude reached. Looking for cars to match velocity...")
 
@@ -198,8 +198,8 @@ class MissionOrchestrator(Node):
                 err_y = self.car_pos[1] - self.drone_pos[1]
                 
                 # Deadband to prevent wobbling: don't correct if error is small (< 0.3m)
-                if abs(err_x) < 0.3: err_x = 0.0
-                if abs(err_y) < 0.3: err_y = 0.0
+                if abs(err_x) < 0.15: err_x = 0.0
+                if abs(err_y) < 0.15: err_y = 0.0
                 
                 v_n = kp * err_x
                 v_e = kp * err_y
@@ -232,7 +232,7 @@ class MissionOrchestrator(Node):
                 # Check if we are at tracking altitude and well-centered (using 3D distance, immune to tilt)
                 xy_error = np.linalg.norm(self.drone_pos[:2] - self.car_pos[:2])
                 is_centered = (xy_error < 1)
-                at_altitude = abs(self.drone_pos[2] - self.tracking_altitude) < 0.5
+                at_altitude = abs(self.drone_pos[2] - self.tracking_altitude) < 1
                 
                 if is_centered and at_altitude:
                     self.get_logger().info("Visual servoing complete. Handing over to ArUco Lander!")
