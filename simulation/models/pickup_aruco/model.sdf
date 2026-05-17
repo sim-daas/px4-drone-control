@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="pickup_aruco">
+    <static>false</static>
+    <link name="link">
+      <!-- High mass and inertia for stable movement -->
+      <inertial>
+        <mass>1500.0</mass>
+        <inertia>
+          <ixx>1000.0</ixx><ixy>0</ixy><ixz>0</ixz>
+          <iyy>1000.0</iyy><iyz>0</iyz>
+          <izz>1000.0</izz>
+        </inertia>
+      </inertial>
+      
+      <collision name="collision">
+        <pose>0 0 0.5 0 0 0</pose>
+        <geometry>
+          <box><size>4.5 2.0 1.0</size></box>
+        </geometry>
+      </collision>
+      
+      <visual name="visual">
+        <pose>0 0 0 0 0 -1.57079632679</pose>
+        <geometry>
+          <mesh>
+            <uri>model://pickup_aruco/meshes/pickup.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <visual name="aruco_marker_visual">
+        <pose>-1.75 -0.06 0.86 0 0 0</pose>
+        <geometry>
+          <plane>
+            <normal>0 0 1</normal>
+            <size>0.6 0.6</size>
+          </plane>
+        </geometry>
+        <material>
+          <diffuse>1.0 1.0 1.0 1.0</diffuse>
+          <specular>1.0 1.0 1.0 1.0</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://pickup_aruco/materials/textures/aruco_marker.png</albedo_map>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+
+    <!-- Prismatic rail joint attached to the world -->
+    <joint name="rail_joint" type="prismatic">
+      <parent>world</parent>
+      <child>link</child>
+      <axis>
+        <!-- The model's initial yaw is 1.88, so local +X points perfectly to the destination -->
+        <xyz>1 0 0</xyz>
+        <limit>
+          <!-- Stop exactly at the 262.41m mark -->
+          <lower>0</lower>
+          <upper>262.41</upper>
+        </limit>
+        <dynamics>
+          <damping>10.0</damping>
+          <friction>0.1</friction>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <plugin
+      filename="gz-sim-joint-controller-system"
+      name="gz::sim::systems::JointController">
+      <joint_name>rail_joint</joint_name>
+    </plugin>
+  </model>
+</sdf>

@@ -13,10 +13,18 @@ windows:
       root: /root/PX4-Autopilot
       layout: even-vertical
       panes:
-        - PX4_SYS_AUTOSTART=4002 PX4_GZ_MODEL_POSE="268.08,-128.22,3.86,0.00,0,-0.7" PX4_SIM_MODEL=gz_x500 ./build/px4_sitl_default/bin/px4
+        - PX4_SYS_AUTOSTART=4002 PX4_GZ_MODEL_POSE="522.11, -413.37, 0.05,0.00,0,-0.7" PX4_SIM_MODEL=gz_x500_mono_cam_down ./build/px4_sitl_default/bin/px4
 
   - ROS2_Controller:
-      root: /root/ros2_ws
+      root: /root/ros2_ws/src/controller
       layout: even-vertical
       panes:
-        - source install/setup.bash && echo "Ready to run ROS 2 controller here."
+        - python3 precision_landing/main.py
+        - python3 precision_landing/aruco_tracker.py
+        - python3 precision_landing/landing_controller.py
+  - Bridge:
+      layout: even-vertical
+      panes:
+        - ros2 run ros_gz_bridge parameter_bridge /model/pickup_aruco/joint/rail_joint/cmd_vel@std_msgs/msg/Float64]gz.msgs.Double
+        - ros2 run ros_gz_bridge parameter_bridge /camera/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo
+        - ros2 run ros_gz_image image_bridge /camera

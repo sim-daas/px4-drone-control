@@ -1,2 +1,5 @@
 px4_offboard_lowlevel/
-*__pycache__
+controller/models/
+controller/yolo*
+controller/controller/**/__pycache__
+*.pyc
