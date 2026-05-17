@@ -22,6 +22,7 @@ class LandingController(Node):
 
         # State Variables
         self.drone_pos = np.zeros(3)
+        self.drone_vel = np.zeros(3)
         self.platform_pos = None
         self.platform_vel = np.zeros(3)
         self.last_marker_seen_time = None
@@ -37,7 +38,7 @@ class LandingController(Node):
         # Subscribers
         self.odom_sub = self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry', self.odom_callback, qos)
         self.platform_pose_sub = self.create_subscription(PoseStamped, '/precision_landing/platform_pose', self.platform_pose_callback, 10)
-        self.platform_vel_sub = self.create_subscription(TwistStamped, '/precision_landing/platform_velocity', self.platform_vel_callback, 10)
+        # We no longer use visually derived ArUco velocity, we will lock the matched velocity at handover
         self.handover_sub = self.create_subscription(Bool, '/precision_landing/handover', self.handover_callback, 10)
 
         # Timers
@@ -50,18 +51,19 @@ class LandingController(Node):
 
     def odom_callback(self, msg):
         self.drone_pos = np.array([msg.position[0], msg.position[1], msg.position[2]])
+        self.drone_vel = np.array([msg.velocity[0], msg.velocity[1], msg.velocity[2]])
 
     def platform_pose_callback(self, msg):
         self.platform_pos = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
         self.last_marker_seen_time = self.get_clock().now()
 
-    def platform_vel_callback(self, msg):
-        self.platform_vel = np.array([msg.twist.linear.x, msg.twist.linear.y, msg.twist.linear.z])
-
     def handover_callback(self, msg):
         if msg.data and self.state == "IDLE":
             self.get_logger().info("Handover received! Waiting for ArUco lock to begin descent...")
             self.state = "WAIT_ARUCO"
+            # Lock the perfectly matched drone velocity to use as feedforward!
+            self.platform_vel = self.drone_vel.copy()
+            self.get_logger().info(f"Locked feedforward velocity: {self.platform_vel[:2]}")
 
     def arm(self):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0)
@@ -89,8 +91,8 @@ class LandingController(Node):
         self.vehicle_command_pub.publish(msg)
 
     def timer_callback(self):
-        if self.state == "IDLE":
-            return # Do not publish offboard heartbeats until handover
+        if self.state in ["IDLE", "DONE"]:
+            return # Do not publish offboard heartbeats until handover, or after landing
 
         if self.offboard_setpoint_counter == 10:
             self.engage_offboard_mode()
@@ -117,7 +119,7 @@ class LandingController(Node):
         now = self.get_clock().now()
         marker_timeout = (self.last_marker_seen_time is not None) and ((now - self.last_marker_seen_time).nanoseconds / 1e9 > 2.0)
         
-        if marker_timeout and self.state != "IDLE" and self.state != "WAIT_ARUCO":
+        if marker_timeout and self.state not in ["IDLE", "WAIT_ARUCO", "LAND", "DONE"]:
             self.get_logger().warn("ArUco Marker lost during descent! Ascending to re-acquire...")
             self.state = "WAIT_ARUCO"
             self.target_alt_relative = -6.0
@@ -140,14 +142,15 @@ class LandingController(Node):
 
             # If very close to platform, land
             z_error = abs(self.drone_pos[2] - self.platform_pos[2])
-            if z_error < 0.3:
+            if z_error < 0.1:
                 self.state = "LAND"
                 self.get_logger().info("Touchdown! Disarming...")
 
         elif self.state == "LAND":
-            self.disarm()
-            # Stop the node or stay in LAND state
-            pass
+            # Hand over to PX4's internal landing flight mode to handle touchdown and auto-disarm gracefully
+            self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_LAND)
+            self.get_logger().info("PX4 Land mode engaged! Mission complete.")
+            self.state = "DONE"
 
     def publish_trajectory_setpoint(self, x, y, z, vx=np.nan, vy=np.nan, vz=np.nan):
         msg = TrajectorySetpoint()

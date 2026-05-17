@@ -24,8 +24,8 @@ class MissionOrchestrator(Node):
         self.drone_yaw = 0.0
         
         self.state = "TAKEOFF" # TAKEOFF, MATCH_VELOCITY, SERVO_DESCEND, HANDOVER
-        self.search_altitude = -8.0 # Fly at 15m altitude initially
-        self.tracking_altitude = -5.0 # Descend to 6m when tracking
+        self.search_altitude = -10.0 # Fly at 15m altitude initially
+        self.tracking_altitude = -4.0 # Descend to 6m when tracking
         self.current_target_altitude = self.search_altitude
         
         self.target_pos = np.zeros(3)
@@ -38,6 +38,8 @@ class MissionOrchestrator(Node):
         self.car_ny = 0.0
         self.car_move = False
         self.last_det_time = None
+        
+        self.global_car_vel = 3.0 # Set this to test different velocities
         
         self.sync_start_time = None
         
@@ -52,6 +54,7 @@ class MissionOrchestrator(Node):
         # Subscribers
         self.odom_sub = self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry', self.odom_callback, qos)
         self.det_sub = self.create_subscription(String, '/det', self.det_callback, 10)
+        self.global_vel_sub = self.create_subscription(Float64, '/precision_landing/global_car_vel', self.global_vel_callback, 10)
 
         # Timers
         self.timer = self.create_timer(0.05, self.timer_callback) # 20Hz
@@ -60,6 +63,10 @@ class MissionOrchestrator(Node):
         self.armed = False
         
         self.get_logger().info("Mission Orchestrator initialized")
+
+    def global_vel_callback(self, msg):
+        self.get_logger().info(f"Updated global car velocity to {msg.data} m/s")
+        self.global_car_vel = msg.data
 
     def odom_callback(self, msg):
         self.drone_pos = np.array([msg.position[0], msg.position[1], msg.position[2]])
@@ -82,7 +89,7 @@ class MissionOrchestrator(Node):
                 best_box = max(data["boxes"], key=lambda b: b["confidence"])
                 self.car_pos = np.array([best_box["world_x"], best_box["world_y"], best_box["world_z"]])
                 # self.car_vel = np.array([best_box["vel_x"], best_box["vel_y"], best_box["vel_z"]])
-                self.car_vel = np.array([2.0, 0.0, 0.0]) # Telemetry Option A
+                self.car_vel = np.array([self.global_car_vel, 0.0, 0.0]) # Telemetry Option A
                 self.car_nx = best_box.get("nx", 0.0)
                 self.car_ny = best_box.get("ny", 0.0)
                 self.last_det_time = self.get_clock().now()
@@ -117,7 +124,7 @@ class MissionOrchestrator(Node):
         if ((self.drone_pos[2] - self.search_altitude) < 2.5) or self.car_move:
             self.car_move = True
             vel_msg = Float64()
-            vel_msg.data = 2.0
+            vel_msg.data = self.global_car_vel
             self.platform_cmd_vel_pub.publish(vel_msg)
 
         if self.state == "HANDOVER":
@@ -199,7 +206,7 @@ class MissionOrchestrator(Node):
                 
                 # Limit the correction velocity (the part that causes tilt)
                 # This prevents huge initial acceleration if the car is far away.
-                max_correction = 1.0 # m/s
+                max_correction = 2.0 # m/s
                 corr_speed = np.linalg.norm([v_n, v_e])
                 if corr_speed > max_correction:
                     v_n = (v_n / corr_speed) * max_correction
@@ -210,7 +217,7 @@ class MissionOrchestrator(Node):
                 cmd_vy = self.car_vel[1] + v_e
                 
                 # Limit total velocity if needed, but allow it to match car speed
-                max_total_vel = 2.2 # m/s
+                max_total_vel = self.global_car_vel + 0.5 # Give it slightly more to catch up
                 speed = np.linalg.norm([cmd_vx, cmd_vy])
                 if speed > max_total_vel:
                     cmd_vx = (cmd_vx / speed) * max_total_vel
@@ -224,7 +231,7 @@ class MissionOrchestrator(Node):
 
                 # Check if we are at tracking altitude and well-centered (using 3D distance, immune to tilt)
                 xy_error = np.linalg.norm(self.drone_pos[:2] - self.car_pos[:2])
-                is_centered = (xy_error < 1.0)
+                is_centered = (xy_error < 1)
                 at_altitude = abs(self.drone_pos[2] - self.tracking_altitude) < 0.5
                 
                 if is_centered and at_altitude:
